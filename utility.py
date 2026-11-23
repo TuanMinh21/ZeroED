@@ -106,6 +106,7 @@ def get_ans_from_llm(prompt, api_use=False):
         timeout = float(os.getenv("LLM_TIMEOUT", "180.0"))
         max_retries = int(os.getenv("LLM_MAX_RETRIES", "8"))
         system_prompt = os.getenv("LLM_SYSTEM_PROMPT", "You are a world-class data engineer, proficient in cleaning dirty data.")
+        reasoning_effort = os.getenv("LLM_REASONING_EFFORT", "high")
 
         client = OpenAI(
             api_key=api_key or "EMPTY",
@@ -115,18 +116,32 @@ def get_ans_from_llm(prompt, api_use=False):
         )
         base_sleep = 1.0
 
+        req_kwargs = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt},
+            ],
+            "max_tokens": max_tokens,
+        }
+        if temperature > 0:
+            req_kwargs["temperature"] = temperature
+        if reasoning_effort:
+            req_kwargs["reasoning_effort"] = reasoning_effort
+            req_kwargs["extra_body"] = {
+                "thinking": {"type": "enabled"},
+                "reasoning_effort": reasoning_effort,
+            }
+
         for attempt in range(1, max_retries + 1):
             try:
                 t0 = time.time()
-                completion_res = client.chat.completions.create(
-                    model=model,
-                    temperature=temperature,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": prompt},
-                    ],
-                    max_tokens=max_tokens,
-                )
+                try:
+                    completion_res = client.chat.completions.create(**req_kwargs)
+                except TypeError:
+                    fallback_kwargs = dict(req_kwargs)
+                    fallback_kwargs.pop("reasoning_effort", None)
+                    completion_res = client.chat.completions.create(**fallback_kwargs)
                 response = completion_res.choices[0].message.content or ""
                 log_file = os.getenv("LLM_LOG_FILE")
                 if log_file:
@@ -134,6 +149,7 @@ def get_ans_from_llm(prompt, api_use=False):
                     record = {
                         "time": time.strftime("%Y-%m-%d %H:%M:%S"),
                         "model": model,
+                        "reasoning_effort": reasoning_effort,
                         "latency_s": round(time.time() - t0, 2),
                         "prompt_tokens": getattr(usage, "prompt_tokens", None),
                         "completion_tokens": getattr(usage, "completion_tokens", None),

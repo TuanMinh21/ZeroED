@@ -22,7 +22,7 @@ notebook = {
             "source": [
                 "# ZeroED: Setup & Execution Guide (Kaggle / Google Colab)\n",
                 "\n",
-                "This notebook sets up and runs **ZeroED** using **DeepSeek V4.1 Flash** (`deepseek-flash`) via the OpenAI-compatible API.\n",
+                "This notebook sets up and runs **ZeroED** using **DeepSeek V4.1 Flash** (`deepseek-flash`) with **high reasoning effort** via the OpenAI-compatible API.\n",
                 "Defaults to the **Rayyan** dataset (or any dataset specified in step 2).\n",
                 "\n",
                 "### Prerequisites\n",
@@ -89,9 +89,10 @@ notebook = {
                 "os.environ[\"LLM_API_KEY\"] = api_key\n",
                 "os.environ[\"LLM_BASE_URL\"] = \"https://api.deepseek.com\"\n",
                 "os.environ[\"LLM_MODEL\"] = \"deepseek-flash\"          # DeepSeek V4.1 Flash\n",
+                "os.environ[\"LLM_REASONING_EFFORT\"] = \"high\"         # High reasoning effort\n",
                 "os.environ[\"LLM_LOG_FILE\"] = \"llm_calls.jsonl\"\n",
                 "\n",
-                "print(f\"Configured for dataset: {DATASET} | Model: {os.environ['LLM_MODEL']}\")"
+                "print(f\"Configured for dataset: {DATASET} | Model: {os.environ['LLM_MODEL']} | Reasoning Effort: {os.environ['LLM_REASONING_EFFORT']}\")"
             ]
         },
         {
