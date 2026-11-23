@@ -225,9 +225,11 @@ def feat_gen(dataset, col_num, col_name, related_attrs_dict, pre_funcs_for_attr,
                 cell_pat_stats[attr][pat] += count
 
     # get fasttext_list
-    model = fasttext.load_model('./cc.en.300.bin')
+    ft_path = os.environ.get('FASTTEXT_MODEL', './cc.en.300.bin')
+    model = fasttext.load_model(ft_path)
     fasttext_dimension = len(all_attrs)
-    fasttext.util.reduce_model(model, fasttext_dimension)
+    if model.get_dimension() != fasttext_dimension:
+        fasttext.util.reduce_model(model, fasttext_dimension)
     fasttext_list = {}
     related_attrs = related_attrs_dict[col_name]
     related_attrs = [all_attrs.index(attr) for attr in related_attrs]

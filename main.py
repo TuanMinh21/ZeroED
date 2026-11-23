@@ -297,9 +297,11 @@ def normalize_string(s):
     
     
 def process_attr_train_feat(attr, dirty_csv, det_right_list, det_wrong_list, related_attrs_dict, err_gen_dict, funcs_for_attr, feature_all_dict, resp_path):
-    fasttext_model = fasttext.load_model('./cc.en.300.bin')
+    ft_path = os.environ.get('FASTTEXT_MODEL', './cc.en.300.bin')
+    fasttext_model = fasttext.load_model(ft_path)
     fasttext_dimension = len(dirty_csv.columns) 
-    fasttext.util.reduce_model(fasttext_model, fasttext_dimension)  
+    if fasttext_model.get_dimension() != fasttext_dimension:
+        fasttext.util.reduce_model(fasttext_model, fasttext_dimension)  
     feature_list, label_list = prep_train_feat(attr, dirty_csv, det_right_list, det_wrong_list, related_attrs_dict, err_gen_dict, funcs_for_attr, fasttext_model, feature_all_dict, resp_path)
     return attr, feature_list, label_list
 
@@ -328,16 +330,20 @@ def single_val_feat(val, fasttext_m, funcs_for_attr, attr, idx, all_attrs, featu
             fasttext_feat = feature_all_dict[(idx, all_attrs.index(attr))].get('fasttext_feat', [])
             if len(fasttext_feat) == 0 or len(fasttext_feat) < len(all_attrs):
                 fasttext_feat = []
-                fasttext_m = fasttext.load_model('./cc.en.300.bin')
+                ft_path = os.environ.get('FASTTEXT_MODEL', './cc.en.300.bin')
+                fasttext_m = fasttext.load_model(ft_path)
                 fasttext_dimension = len(all_attrs)  
-                fasttext.util.reduce_model(fasttext_m, fasttext_dimension)  
+                if fasttext_m.get_dimension() != fasttext_dimension:
+                    fasttext.util.reduce_model(fasttext_m, fasttext_dimension)  
                 for a_val in val.values():
                     fasttext_feat.extend(fasttext_m.get_word_vector(str(a_val)))
             feature.extend(fasttext_feat)
         else:
-            fasttext_m = fasttext.load_model('./cc.en.300.bin')
+            ft_path = os.environ.get('FASTTEXT_MODEL', './cc.en.300.bin')
+            fasttext_m = fasttext.load_model(ft_path)
             fasttext_dimension = len(all_attrs)  
-            fasttext.util.reduce_model(fasttext_m, fasttext_dimension)  
+            if fasttext_m.get_dimension() != fasttext_dimension:
+                fasttext.util.reduce_model(fasttext_m, fasttext_dimension)  
             fasttext_feat = []
             for a_val in val.values():
                 fasttext_feat.extend(fasttext_m.get_word_vector(str(a_val)))
@@ -806,7 +812,7 @@ if __name__ == "__main__":
     read_path_dict = config['read_paths']
     READ_IN_BATCH = config['read']['read_in_batch']
     if READ_IN_BATCH:
-        read_path_dict = get_read_paths(config['read']['start_time'], config['read']['end_time'], base_dir)
+        read_path_dict = get_read_paths(config['read']['start_time'], config['read']['end_time'], base_dir, result_dir)
     
     date_time = datetime.now().strftime("%m-%d")
     run_info = config['model']['run_info']

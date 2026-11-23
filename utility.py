@@ -1,8 +1,10 @@
-import datetime
-import shutil
+from datetime import datetime
+import json
 import logging
 import os
 import random
+import re
+import shutil
 import time
 import traceback
 from collections import defaultdict
@@ -89,20 +91,81 @@ def get_read_paths(start_time, end_time, base_dir, result_dir):
 
 
 def get_ans_from_llm(prompt, api_use=False):
-    if not api_use:
+    use_api = (
+        api_use
+        or os.getenv("LLM_API_USE", "").lower() in ("1", "true", "yes")
+        or bool(os.getenv("LLM_API_KEY"))
+    )
+
+    if use_api:
+        api_key = os.getenv("LLM_API_KEY", "")
+        base_url = os.getenv("LLM_BASE_URL", "https://api.deepseek.com")
+        model = os.getenv("LLM_MODEL", "deepseek-flash")
+        temperature = float(os.getenv("LLM_TEMPERATURE", "0.0"))
+        max_tokens = int(os.getenv("LLM_MAX_TOKENS", "4096"))
+        timeout = float(os.getenv("LLM_TIMEOUT", "180.0"))
+        max_retries = int(os.getenv("LLM_MAX_RETRIES", "8"))
+        system_prompt = os.getenv("LLM_SYSTEM_PROMPT", "You are a world-class data engineer, proficient in cleaning dirty data.")
+
+        client = OpenAI(
+            api_key=api_key or "EMPTY",
+            base_url=base_url,
+            timeout=timeout,
+            max_retries=0,
+        )
+        base_sleep = 1.0
+
+        for attempt in range(1, max_retries + 1):
+            try:
+                t0 = time.time()
+                completion_res = client.chat.completions.create(
+                    model=model,
+                    temperature=temperature,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": prompt},
+                    ],
+                    max_tokens=max_tokens,
+                )
+                response = completion_res.choices[0].message.content or ""
+                log_file = os.getenv("LLM_LOG_FILE")
+                if log_file:
+                    usage = getattr(completion_res, "usage", None)
+                    record = {
+                        "time": time.strftime("%Y-%m-%d %H:%M:%S"),
+                        "model": model,
+                        "latency_s": round(time.time() - t0, 2),
+                        "prompt_tokens": getattr(usage, "prompt_tokens", None),
+                        "completion_tokens": getattr(usage, "completion_tokens", None),
+                    }
+                    try:
+                        with open(log_file, "a", encoding="utf-8") as f:
+                            f.write(json.dumps(record) + "\n")
+                    except Exception:
+                        pass
+                return response
+            except Exception as e:
+                err_str = str(e)
+                if "authentication" in err_str.lower() or "401" in err_str:
+                    raise RuntimeError(f"[LLM] Authentication failed: {e}") from e
+                sleep_time = min(60, base_sleep * (2 ** (attempt - 1)) + random.uniform(0, 1))
+                print(f"[LLM] API request failed (attempt {attempt}/{max_retries}): {e}. Retrying in {sleep_time:.1f}s...")
+                time.sleep(sleep_time)
+                if attempt >= max_retries:
+                    print(f"[LLM] Maximum {max_retries} retries reached. Returning empty response.")
+                    return ""
+    else:
+        # Local vLLM endpoint fallback
         openai_api_key = "EMPTY"
         openai_api_base = "http://localhost:8000/v1"
         max_retries = 5
-        base_sleep = 1
-
+        client = OpenAI(
+            api_key=openai_api_key,
+            base_url=openai_api_base,
+            max_retries=100,
+        )
         for attempt in range(max_retries):
             try:
-                client = OpenAI(
-                    api_key=openai_api_key,
-                    base_url=openai_api_base,
-                    max_retries=100,
-                )
-
                 chat_response = client.chat.completions.create(
                     model="./qwen2.5-72bs-instruct",
                     messages=[
@@ -115,58 +178,16 @@ def get_ans_from_llm(prompt, api_use=False):
                         "repetition_penalty": 1.05,
                     },
                 )
-                return chat_response.choices[0].message.content
+                return chat_response.choices[0].message.content or ""
             except Exception as e:
-                print(e)
-    elif api_use:
-        model_type='qwen2.5-7b-instruct'
-        role_descr="You are a world-class data engineer, proficient in cleaning dirty data."
-        api_key_list = [
-            ''
-        ]
-        # Exponential backoff parameters
-        base_sleep = 0.2
-        max_retries = 200
-        try_cnt = 0
-        key_idx = 0
-
-        while 1:
-            try:
-                client = OpenAI(
-                    api_key=api_key_list[key_idx],
-                    base_url='https://api.openai.com/v1'
-                )
-                completion_res = client.chat.completions.create(
-                    model=model_type,
-                    temperature=0,
-                    messages=[
-                        {"role": "system",
-                        "content": role_descr},
-                        {"role": "user", "content": prompt}
-                    ]
-                )
-                response = completion_res.choices[0].message.content
-                try_cnt = 0
-                key_idx = 0
-                return response
-            except Exception as e:
-                print(e)
-                key_idx += 1
-                if key_idx >= len(api_key_list):
-                    sleep_time = base_sleep * (2 + try_cnt)  # Exponential backoff
-                    time.sleep(sleep_time)
-                    print("Sleeping for {} seconds".format(sleep_time))
-                    print(e)
-                    try_cnt += 1
-                    key_idx = 0
-                    if try_cnt >= max_retries:
-                        print("Maximum {} retries reached for OpenAI API requests.".format(max_retries))
-                        break
+                print(f"[Local LLM] Error: {e}")
+                time.sleep(1)
+        return ""
 
 
 def rag_query(query, documents, GPT_USE=True):
     if GPT_USE:
-        response = get_ans_from_llm(f"Question: {query}\n\n Guidelines:{documents}")
+        response = get_ans_from_llm(f"Question: {query}\n\n Guidelines:{documents}", api_use=True)
     else:
         response = ''
     return response
@@ -174,7 +195,7 @@ def rag_query(query, documents, GPT_USE=True):
 
 def query_base(query, GPT_USE=True):
     if GPT_USE:
-        response = get_ans_from_llm(f"{query}")
+        response = get_ans_from_llm(f"{query}", api_use=True)
     else:
         response = ''
     return response

@@ -1,0 +1,14 @@
+numpy<2.0.0
+pandas>=1.3.0
+scikit-learn
+torch
+pyyaml
+tqdm
+openai>=1.0.0
+fasttext-wheel
+jellyfish
+pyspellchecker
+kneed
+prettytable
+sentence-transformers
+psutil

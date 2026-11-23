@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.DS_Store
+
+# FastText and LLM logs
+ft_cache/
+cc.en.*.bin
+cc.en.*.bin.gz
+llm_calls.jsonl
+*.log
+
+# Experiment outputs and archives
+result/
+*.zip
+*.tar.gz
