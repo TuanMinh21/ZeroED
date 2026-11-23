@@ -32,6 +32,10 @@ def kb_gen_prompt(attr_name, dataset_name, idx_list, dirty_csv, attr_analy_conte
     return prompt
 
 
+# Alias for compatibility with main.py
+guide_gen_prompt = kb_gen_prompt
+
+
 def error_check_prompt(col_values, col_name):
     lines = col_values.strip().split('\n')
     try:
